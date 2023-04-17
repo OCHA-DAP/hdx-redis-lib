@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "hdx-redis-lib"
+version = "0.1.0"
+description = "Simplifying access to redis streams and redis key-value store"
+authors = ["HDX"]
+readme = "README.md"
+packages = [{include = "hdx_redis_lib"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+redis = ">=3.2.1"
+
+[tool.poetry.group.dev.dependencies]
+poetry = ">=1.4.2,<1.5.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
