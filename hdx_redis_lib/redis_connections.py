@@ -1,7 +1,7 @@
 import json
 import logging
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable, Tuple
 
 import redis
 from redis.exceptions import ResponseError
@@ -82,6 +82,22 @@ class RedisEventBus():
 
         return decoded_result
 
+    def listen(self, event_processor: Callable[[Dict], Tuple[bool, str]],
+               event_transformer: Callable[[Dict], Optional[Dict]] = None):
+        try:
+            while True:
+                event = self.read_event()
+                if event_transformer:
+                    event = event_transformer(event)
+                if not event:
+                    logger.info('Event with value None arrived')
+                else:
+                    result, message = event_processor(event)
+                    if not result:
+                        logger.error('Event processor decided to stop. Reason: {}'.format(message))
+        except Exception as e:
+            logger.error(str(e))
+
 
 class HDXRedisEventBus(RedisEventBus):
 
@@ -89,15 +105,19 @@ class HDXRedisEventBus(RedisEventBus):
         return HDXWriteOnlyRedisEventBus(stream_name, redis_conf)
 
     def read_hdx_event(self, block: Optional[int] = 2 * 60 * 1000) -> Optional[Dict[str, str]]:
-        event_dictionary = self.read_event(block=block)
-        event_body_json = event_dictionary.get('body') if event_dictionary else None
+        generic_event = self.read_event(block=block)
+        return _extract_hdx_event(generic_event)
 
-        if event_body_json:
-            event_body = json.loads(event_body_json)
-            return event_body
+    def hdx_listen(self, event_processor: Callable[[Dict], Tuple[bool, str]]):
+        return self.listen(event_processor, event_transformer=_extract_hdx_event)
 
-        return None
 
+def _extract_hdx_event(generic_event: Dict) -> Optional[Dict]:
+    event_body_json = generic_event.get('body') if generic_event else None
+    if event_body_json:
+        event_body = json.loads(event_body_json)
+        return event_body
+    return None
 
 class RedisKeyValueStore:
     def __init__(self, redis_conf: RedisConfig, expire_in_seconds=12*60*60) -> None:
