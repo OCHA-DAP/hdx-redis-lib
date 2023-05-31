@@ -63,7 +63,7 @@ class RedisEventBus():
             self.redis_conn.xgroup_create(self.stream_name, self.group_name, id='0', mkstream=True)
         except ResponseError as re:
             if 'BUSYGROUP' in re.args[0]:
-                logger.debug('Consumer group {} already exists', format(self.consumer_name))
+                logger.debug('Consumer group {} already exists'.format(self.consumer_name))
             else:
                 raise re
         result = self.redis_conn.xreadgroup(
