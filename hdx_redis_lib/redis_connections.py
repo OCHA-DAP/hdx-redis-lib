@@ -1,7 +1,9 @@
 import json
 import logging
+import os
+
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, Callable, Tuple
+from typing import Optional, Dict, Any, Callable, Tuple, Iterable
 
 import redis
 from redis.exceptions import ResponseError
@@ -83,10 +85,30 @@ class RedisEventBus():
         return decoded_result
 
     def listen(self, event_processor: Callable[[Dict], Tuple[bool, str]],
+               pre_filter: Callable[[Dict], bool] = None,
                event_transformer: Callable[[Dict], Optional[Dict]] = None):
+        """
+        Listens to and processes incoming events. The function runs in an infinite loop until
+        an exception occurs or the event_processor returns a False result.
+
+        Parameters:
+        - `event_processor` : Callable[[Dict], Tuple[bool, str]]
+            A function to process the event. It should take a dictionary as input and return
+            a tuple where the first element is a boolean indicating the success of the operation
+            and the second is a string message which will be logged if not successful
+        - `pre_filter` : Callable[[Dict], bool], optional
+            A function that takes an event as input and returns a boolean value indicating whether
+            the event should be processed. Default is None.
+        - `event_transformer` : Callable[[Dict], Optional[Dict]], optional
+            A function that transforms the event into something that the event processor function expects to
+            receive. Ex: JSON string to Dict
+
+        """
         try:
             while True:
                 event = self.read_event()
+                if event and pre_filter:
+                    event = event if pre_filter(event) else None
                 if event_transformer:
                     event = event_transformer(event)
                 if not event:
@@ -108,8 +130,12 @@ class HDXRedisEventBus(RedisEventBus):
         generic_event = self.read_event(block=block)
         return _extract_hdx_event(generic_event)
 
-    def hdx_listen(self, event_processor: Callable[[Dict], Tuple[bool, str]]):
-        return self.listen(event_processor, event_transformer=_extract_hdx_event)
+    def hdx_listen(self, event_processor: Callable[[Dict], Tuple[bool, str]], allowed_event_types: Iterable[str]):
+
+        return self.listen(event_processor,
+                           pre_filter=lambda event: _filter_by_event_type(event, allowed_event_types),
+                           event_transformer=_extract_hdx_event
+                           )
 
 
 def _extract_hdx_event(generic_event: Dict) -> Optional[Dict]:
@@ -118,6 +144,13 @@ def _extract_hdx_event(generic_event: Dict) -> Optional[Dict]:
         event_body = json.loads(event_body_json)
         return event_body
     return None
+
+
+def _filter_by_event_type(event: Dict, allowed_event_types: Iterable[str]) -> bool:
+    if event and event.get('event_type') in allowed_event_types:
+        return True
+    return False
+
 
 class RedisKeyValueStore:
     def __init__(self, redis_conf: RedisConfig, expire_in_seconds=12*60*60) -> None:
@@ -194,3 +227,31 @@ def connect_to_hdx_event_bus(stream_name: str, group_name: str, consumer_name: s
     """
     event_bus = HDXRedisEventBus(stream_name, group_name, consumer_name, redis_conf)
     return event_bus
+
+
+def connect_to_hdx_event_bus_with_env_vars() -> HDXRedisEventBus:
+    """
+    Expects the following env vars:
+    - REDIS_STREAM_HOST (if missing assumes 'redis')
+    - REDIS_STREAM_PORT (if missing assumes 6379)
+    - REDIS_STREAM_DB (if missing assumes 7)
+    - REDIS_STREAM_STREAM_NAME
+    - REDIS_STREAM_GROUP_NAME
+    - REDIS_STREAM_CONSUMER_NAME
+
+    Returns:
+    --------
+    - An instance of `HDXRedisEventBus`.
+    """
+    redis_stream_host = os.getenv('REDIS_STREAM_HOST', 'redis')
+    redis_stream_port = os.getenv('REDIS_STREAM_PORT', 6379)
+    redis_stream_db = os.getenv('REDIS_STREAM_DB', 7)
+
+    # Define the stream name and the ID to start reading from
+    stream_name = os.getenv('REDIS_STREAM_STREAM_NAME', None)
+    group_name = os.getenv('REDIS_STREAM_GROUP_NAME', None)
+    consumer_name = os.getenv('REDIS_STREAM_CONSUMER_NAME', None)
+
+    return connect_to_hdx_event_bus(stream_name, group_name, consumer_name,
+                                    RedisConfig(host=redis_stream_host, port=redis_stream_port, db=redis_stream_db))
+

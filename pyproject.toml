@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hdx-redis-lib"
-version = "0.1.3"
+version = "0.2.0"
 description = "Simplifying access to redis streams and redis key-value store"
 authors = ["HDX"]
 readme = "README.md"
