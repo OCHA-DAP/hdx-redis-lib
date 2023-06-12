@@ -130,12 +130,18 @@ class HDXRedisEventBus(RedisEventBus):
         generic_event = self.read_event(block=block)
         return _extract_hdx_event(generic_event)
 
-    def hdx_listen(self, event_processor: Callable[[Dict], Tuple[bool, str]], allowed_event_types: Iterable[str]):
+    def hdx_listen(self, event_processor: Callable[[Dict], Tuple[bool, str]],
+                   allowed_event_types: Iterable[str] = None):
 
-        return self.listen(event_processor,
-                           pre_filter=lambda event: _filter_by_event_type(event, allowed_event_types),
-                           event_transformer=_extract_hdx_event
-                           )
+        if allowed_event_types:
+            return self.listen(event_processor,
+                               pre_filter=lambda event: _filter_by_event_type(event, allowed_event_types),
+                               event_transformer=_extract_hdx_event
+                               )
+        else:
+            return self.listen(event_processor,
+                               event_transformer=_extract_hdx_event
+                               )
 
 
 def _extract_hdx_event(generic_event: Dict) -> Optional[Dict]:
@@ -251,6 +257,12 @@ def connect_to_hdx_event_bus_with_env_vars() -> HDXRedisEventBus:
     stream_name = os.getenv('REDIS_STREAM_STREAM_NAME', None)
     group_name = os.getenv('REDIS_STREAM_GROUP_NAME', None)
     consumer_name = os.getenv('REDIS_STREAM_CONSUMER_NAME', None)
+
+    if not stream_name or not group_name or not consumer_name:
+        raise ValueError(
+            'One of the following env variables is missing: REDIS_STREAM_STREAM_NAME, REDIS_STREAM_GROUP_NAME, '
+            'REDIS_STREAM_CONSUMER_NAME'
+        )
 
     return connect_to_hdx_event_bus(stream_name, group_name, consumer_name,
                                     RedisConfig(host=redis_stream_host, port=redis_stream_port, db=redis_stream_db))
