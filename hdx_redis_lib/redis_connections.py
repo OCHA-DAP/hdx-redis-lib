@@ -3,7 +3,7 @@ import logging
 import os
 
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, Callable, Tuple, Iterable
+from typing import Optional, Dict, Any, Callable, Tuple, Iterable, Set
 
 import redis
 from redis.exceptions import ResponseError
@@ -180,6 +180,28 @@ class RedisKeyValueStore:
         decoded_value = value.decode('utf-8') if value is not None else None
         return json.loads(decoded_value)
 
+    def set_set(self, key: str, values: Set):
+        encoded_values = [bytes(v, 'utf-8') for v in values]
+        length = len(encoded_values)
+        step = 200
+        start = 0
+        for i in range(start, length, step):
+            chunk = encoded_values[i:i+step]
+            self.redis_conn.sadd(key, *chunk)
+        self.redis_conn.expire(key, self.expire_in_seconds)
+
+    def get_set(self, key: str) -> Set:
+        values = self.redis_conn.smembers(key)
+        if values:
+            decoded_values = {v.decode('utf-8') for v in values}
+            return decoded_values
+        return values
+
+    def is_in_set(self, key: str, value: str) -> bool:
+        encoded_value = bytes(value, 'utf-8')
+        result = self.redis_conn.sismember(key, encoded_value)
+        return result
+
 
 def connect_to_write_only_event_bus(stream_name: str, redis_conf: RedisConfig = None) -> WriteOnlyRedisEventBus:
     """
@@ -267,3 +289,21 @@ def connect_to_hdx_event_bus_with_env_vars() -> HDXRedisEventBus:
     return connect_to_hdx_event_bus(stream_name, group_name, consumer_name,
                                     RedisConfig(host=redis_stream_host, port=redis_stream_port, db=redis_stream_db))
 
+
+def connect_to_key_value_store_with_env_vars(expire_in_seconds=12*60*60) -> RedisKeyValueStore:
+    """
+    Expects the following env vars:
+    - REDIS_STREAM_HOST (if missing assumes 'redis')
+    - REDIS_STREAM_PORT (if missing assumes 6379)
+    - REDIS_STREAM_DB (if missing assumes 7)
+
+    Returns:
+    --------
+    - An instance of `RedisKeyValueStore`.
+    """
+    redis_stream_host = os.getenv('REDIS_STREAM_HOST', 'redis')
+    redis_stream_port = os.getenv('REDIS_STREAM_PORT', 6379)
+    redis_stream_db = os.getenv('REDIS_STREAM_DB', 7)
+
+    return RedisKeyValueStore(RedisConfig(host=redis_stream_host, db=redis_stream_db, port=redis_stream_port),
+                              expire_in_seconds=expire_in_seconds)
