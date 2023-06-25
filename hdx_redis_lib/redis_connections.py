@@ -163,6 +163,9 @@ class RedisKeyValueStore:
         self.redis_conn = redis.Redis(host=redis_conf.host, port=redis_conf.port, db=redis_conf.db)
         self.expire_in_seconds = expire_in_seconds
 
+    def exists(self, key):
+        return self.redis_conn.exists(key)
+
     def set_string(self, key: str, value: str) -> None:
         encoded_value = bytes(value, 'utf-8')
         self.redis_conn.set(key, encoded_value, ex=self.expire_in_seconds)
