@@ -86,10 +86,11 @@ class RedisEventBus():
 
     def listen(self, event_processor: Callable[[Dict], Tuple[bool, str]],
                pre_filter: Callable[[Dict], bool] = None,
-               event_transformer: Callable[[Dict], Optional[Dict]] = None):
+               event_transformer: Callable[[Dict], Optional[Dict]] = None,
+               max_iterations: int = None):
         """
-        Listens to and processes incoming events. The function runs in an infinite loop until
-        an exception occurs or the event_processor returns a False result.
+        Listens to and processes incoming events. The function runs in an infinite loop (unless max_iterations is
+        specified until ) an exception occurs or the event_processor returns a False result.
 
         Parameters:
         - `event_processor` : Callable[[Dict], Tuple[bool, str]]
@@ -102,10 +103,17 @@ class RedisEventBus():
         - `event_transformer` : Callable[[Dict], Optional[Dict]], optional
             A function that transforms the event into something that the event processor function expects to
             receive. Ex: JSON string to Dict
+        - `max_iterations` : Max number of iterations. After that the function just exits.
 
         """
+        counter = 1
         try:
             while True:
+                if max_iterations and max_iterations > 0:
+                    if max_iterations < counter:
+                        logger.info('Exiting listening function because max iteration was reached')
+                        break
+                    counter += 1
                 event = self.read_event()
                 if event and pre_filter:
                     event = event if pre_filter(event) else None
@@ -131,16 +139,19 @@ class HDXRedisEventBus(RedisEventBus):
         return _extract_hdx_event(generic_event)
 
     def hdx_listen(self, event_processor: Callable[[Dict], Tuple[bool, str]],
-                   allowed_event_types: Iterable[str] = None):
+                   allowed_event_types: Iterable[str] = None,
+                   max_iterations: int = None):
 
         if allowed_event_types:
             return self.listen(event_processor,
                                pre_filter=lambda event: _filter_by_event_type(event, allowed_event_types),
-                               event_transformer=_extract_hdx_event
+                               event_transformer=_extract_hdx_event,
+                               max_iterations=max_iterations
                                )
         else:
             return self.listen(event_processor,
-                               event_transformer=_extract_hdx_event
+                               event_transformer=_extract_hdx_event,
+                               max_iterations=max_iterations
                                )
 
 
@@ -183,7 +194,7 @@ class RedisKeyValueStore:
         decoded_value = value.decode('utf-8') if value is not None else None
         return json.loads(decoded_value)
 
-    def set_set(self, key: str, values: Set):
+    def set_set(self, key: str, values: Set[str]):
         encoded_values = [bytes(v, 'utf-8') for v in values]
         length = len(encoded_values)
         step = 200
@@ -193,7 +204,7 @@ class RedisKeyValueStore:
             self.redis_conn.sadd(key, *chunk)
         self.redis_conn.expire(key, self.expire_in_seconds)
 
-    def get_set(self, key: str) -> Set:
+    def get_set(self, key: str) -> Set[str]:
         values = self.redis_conn.smembers(key)
         if values:
             decoded_values = {v.decode('utf-8') for v in values}
