@@ -216,6 +216,35 @@ class RedisKeyValueStore:
         result = self.redis_conn.sismember(key, encoded_value)
         return result
 
+    def set_map(self, key: str, map_dict: Dict[str, str]):
+        encoded_map = {bytes(k, 'utf-8'): bytes(v, 'utf-8') for k, v in map_dict.items()}
+        self.redis_conn.hset(key, mapping=encoded_map)
+
+    def get_map(self, key: str):
+        map_dict = self.redis_conn.hgetall(key)
+        if map_dict:
+            decoded_map = {k.decode('utf-8'): v.decode('utf-8') for k, v in map_dict.items()}
+            return decoded_map
+        return map_dict
+
+    def get_map_and_delete(self, key: str):
+        pipe = self.redis_conn.pipeline()
+        pipe.hgetall(key)
+        pipe.delete(key)
+        result = pipe.execute()
+        if not result:
+            logger.warning(f'Map {key} could not be fetched and deleted')
+            return None
+        else:
+            map_dict = result[0]
+            decoded_map = {k.decode('utf-8'): v.decode('utf-8') for k, v in map_dict.items()}
+            return decoded_map
+
+    def get_map_value(self, key: str, map_key: str):
+        encoded_map_key = bytes(map_key, 'utf-8')
+        value = self.redis_conn.hget(key, encoded_map_key)
+        return value.decode('utf-8') if value is not None else None
+
 
 def connect_to_write_only_event_bus(stream_name: str, redis_conf: RedisConfig = None) -> WriteOnlyRedisEventBus:
     """
