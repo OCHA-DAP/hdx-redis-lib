@@ -192,7 +192,7 @@ class RedisKeyValueStore:
     def get_object(self, key: str) -> Optional[Any]:
         value = self.redis_conn.get(key)
         decoded_value = value.decode('utf-8') if value is not None else None
-        return json.loads(decoded_value)
+        return json.loads(decoded_value) if decoded_value else decoded_value
 
     def set_set(self, key: str, values: Set[str]):
         encoded_values = [bytes(v, 'utf-8') for v in values]
