@@ -216,9 +216,10 @@ class RedisKeyValueStore:
         result = self.redis_conn.sismember(key, encoded_value)
         return result
 
-    def set_map(self, key: str, map_dict: Dict[str, str]):
+    def set_map(self, key: str, map_dict: Dict[str, str], expire_in_seconds: int=None):
         encoded_map = {bytes(k, 'utf-8'): bytes(v, 'utf-8') for k, v in map_dict.items()}
         self.redis_conn.hset(key, mapping=encoded_map)
+        self.redis_conn.expire(key, expire_in_seconds or self.expire_in_seconds)
 
     def get_map(self, key: str):
         map_dict = self.redis_conn.hgetall(key)
