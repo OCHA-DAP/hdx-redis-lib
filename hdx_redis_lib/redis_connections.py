@@ -177,24 +177,24 @@ class RedisKeyValueStore:
     def exists(self, key):
         return self.redis_conn.exists(key)
 
-    def set_string(self, key: str, value: str) -> None:
+    def set_string(self, key: str, value: str, expire_in_seconds: int=None) -> None:
         encoded_value = bytes(value, 'utf-8')
-        self.redis_conn.set(key, encoded_value, ex=self.expire_in_seconds)
+        self.redis_conn.set(key, encoded_value, ex=expire_in_seconds or self.expire_in_seconds)
 
     def get_string(self, key: str) -> Optional[str]:
         value = self.redis_conn.get(key)
         return value.decode('utf-8') if value is not None else None
 
-    def set_object(self, key: str, value: Any) -> None:
+    def set_object(self, key: str, value: Any, expire_in_seconds: int=None) -> None:
         encoded_value = bytes(json.dumps(value), 'utf-8')
-        self.redis_conn.set(key, encoded_value, ex=self.expire_in_seconds)
+        self.redis_conn.set(key, encoded_value, ex=expire_in_seconds or self.expire_in_seconds)
 
     def get_object(self, key: str) -> Optional[Any]:
         value = self.redis_conn.get(key)
         decoded_value = value.decode('utf-8') if value is not None else None
         return json.loads(decoded_value) if decoded_value else decoded_value
 
-    def set_set(self, key: str, values: Set[str]):
+    def set_set(self, key: str, values: Set[str], expire_in_seconds: int=None):
         encoded_values = [bytes(v, 'utf-8') for v in values]
         length = len(encoded_values)
         step = 200
@@ -202,7 +202,7 @@ class RedisKeyValueStore:
         for i in range(start, length, step):
             chunk = encoded_values[i:i+step]
             self.redis_conn.sadd(key, *chunk)
-        self.redis_conn.expire(key, self.expire_in_seconds)
+        self.redis_conn.expire(key, expire_in_seconds or self.expire_in_seconds)
 
     def get_set(self, key: str) -> Set[str]:
         values = self.redis_conn.smembers(key)
@@ -216,9 +216,10 @@ class RedisKeyValueStore:
         result = self.redis_conn.sismember(key, encoded_value)
         return result
 
-    def set_map(self, key: str, map_dict: Dict[str, str]):
+    def set_map(self, key: str, map_dict: Dict[str, str], expire_in_seconds: int=None):
         encoded_map = {bytes(k, 'utf-8'): bytes(v, 'utf-8') for k, v in map_dict.items()}
         self.redis_conn.hset(key, mapping=encoded_map)
+        self.redis_conn.expire(key, expire_in_seconds or self.expire_in_seconds)
 
     def get_map(self, key: str):
         map_dict = self.redis_conn.hgetall(key)
