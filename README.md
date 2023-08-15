@@ -1,3 +1,6 @@
+[![Run tests](https://github.com/OCHA-DAP/hdx-redis-lib/actions/workflows/run-tests.yml/badge.svg)](https://github.com/OCHA-DAP/hdx-redis-lib/actions/workflows/run-tests.yml)
+[![codecov](https://codecov.io/gh/OCHA-DAP/hdx-redis-lib/graph/badge.svg?token=VVKZJSR7K5)](https://codecov.io/gh/OCHA-DAP/hdx-redis-lib)
+
 HDX REDIS LIB
 =============
 
