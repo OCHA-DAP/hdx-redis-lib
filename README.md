@@ -1,3 +1,5 @@
+[![Run tests](https://github.com/OCHA-DAP/hdx-redis-lib/actions/workflows/run-tests.yml/badge.svg)](https://github.com/OCHA-DAP/hdx-redis-lib/actions/workflows/run-tests.yml)
+
 HDX REDIS LIB
 =============
 
