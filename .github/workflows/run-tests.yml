@@ -27,3 +27,5 @@ jobs:
         run: pytest --cov=./hdx_redis_lib
         env:
           REDIS_STREAM_HOST: localhost
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v3
