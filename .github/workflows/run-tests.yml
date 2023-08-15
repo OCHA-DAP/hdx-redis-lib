@@ -1,0 +1,29 @@
+name: Run tests
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.10"
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install requirements
+        run: |
+          pip install -r requirements.txt
+          pip install -r dev-requirements.txt
+      - name: Test with pytest
+        run: pytest --cov=./hdx_redis_lib
+        env:
+          REDIS_STREAM_HOST: localhost
