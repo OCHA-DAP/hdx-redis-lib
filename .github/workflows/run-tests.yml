@@ -5,6 +5,9 @@ on: [push]
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.9", "3.10", "3.11" ]
     services:
       redis:
         image: redis:7-alpine
@@ -12,12 +15,12 @@ jobs:
           - 6379:6379
     steps:
       - name: Set up Python 3.10
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
 
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install requirements
         run: |
@@ -27,5 +30,9 @@ jobs:
         run: pytest --cov=./hdx_redis_lib
         env:
           REDIS_STREAM_HOST: localhost
+          REDIS_STREAM_STREAM_NAME: hdx_event_stream
+          REDIS_STREAM_GROUP_NAME: hdx_jp_sw_qa_ingest_group
+          REDIS_STREAM_CONSUMER_NAME: hdx_jp_sw_qa_ingest_consumer_1
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v3
+        if: matrix.python-version == '3.10'
