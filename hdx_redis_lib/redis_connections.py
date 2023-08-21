@@ -277,6 +277,28 @@ def connect_to_hdx_write_only_event_bus(stream_name: str, redis_conf: RedisConfi
     return event_bus
 
 
+def connect_to_hdx_write_only_event_bus_with_env_vars() -> HDXWriteOnlyRedisEventBus:
+    """
+    Expects the following env vars:
+    - REDIS_STREAM_HOST (if missing assumes 'redis')
+    - REDIS_STREAM_PORT (if missing assumes 6379)
+    - REDIS_STREAM_DB (if missing assumes 7)
+    - REDIS_STREAM_STREAM_NAME
+
+    Returns:
+    --------
+    - An instance of `HDXWriteOnlyRedisEventBus`.
+    """
+    redis_stream_host, redis_stream_port, redis_stream_db = _get_redis_stream_env_vars()
+    stream_name = os.getenv('REDIS_STREAM_STREAM_NAME', None)
+    if not stream_name:
+        raise ValueError(
+            'Env variable is missing: REDIS_STREAM_STREAM_NAME'
+        )
+    return connect_to_hdx_write_only_event_bus(stream_name, RedisConfig(host=redis_stream_host, port=redis_stream_port,
+                                                                        db=redis_stream_db))
+
+
 def connect_to_event_bus(stream_name: str, group_name: str, consumer_name: str,
                          redis_conf: RedisConfig = None) -> RedisEventBus:
     event_bus = RedisEventBus(stream_name, group_name, consumer_name, redis_conf)
@@ -315,23 +337,46 @@ def connect_to_hdx_event_bus_with_env_vars() -> HDXRedisEventBus:
     --------
     - An instance of `HDXRedisEventBus`.
     """
-    redis_stream_host = os.getenv('REDIS_STREAM_HOST', 'redis')
-    redis_stream_port = os.getenv('REDIS_STREAM_PORT', 6379)
-    redis_stream_db = os.getenv('REDIS_STREAM_DB', 7)
+    redis_stream_host, redis_stream_port, redis_stream_db, stream_name, \
+        group_name, consumer_name = _get_event_bus_env_vars()
 
-    # Define the stream name and the ID to start reading from
+    return connect_to_hdx_event_bus(stream_name, group_name, consumer_name,
+                                    RedisConfig(host=redis_stream_host, port=redis_stream_port, db=redis_stream_db))
+
+
+def connect_to_event_bus_with_env_vars() -> RedisEventBus:
+    """
+    Expects the following env vars:
+    - REDIS_STREAM_HOST (if missing assumes 'redis')
+    - REDIS_STREAM_PORT (if missing assumes 6379)
+    - REDIS_STREAM_DB (if missing assumes 7)
+    - REDIS_STREAM_STREAM_NAME
+    - REDIS_STREAM_GROUP_NAME
+    - REDIS_STREAM_CONSUMER_NAME
+
+    Returns:
+    --------
+    - An instance of `HDXRedisEventBus`.
+    """
+    redis_stream_host, redis_stream_port, redis_stream_db, stream_name, \
+        group_name, consumer_name = _get_event_bus_env_vars()
+
+    return connect_to_event_bus(stream_name, group_name, consumer_name,
+                                RedisConfig(host=redis_stream_host, port=redis_stream_port, db=redis_stream_db))
+
+
+def _get_event_bus_env_vars():
+    redis_stream_host, redis_stream_port, redis_stream_db = _get_redis_stream_env_vars()
+
     stream_name = os.getenv('REDIS_STREAM_STREAM_NAME', None)
     group_name = os.getenv('REDIS_STREAM_GROUP_NAME', None)
     consumer_name = os.getenv('REDIS_STREAM_CONSUMER_NAME', None)
-
     if not stream_name or not group_name or not consumer_name:
         raise ValueError(
             'One of the following env variables is missing: REDIS_STREAM_STREAM_NAME, REDIS_STREAM_GROUP_NAME, '
             'REDIS_STREAM_CONSUMER_NAME'
         )
-
-    return connect_to_hdx_event_bus(stream_name, group_name, consumer_name,
-                                    RedisConfig(host=redis_stream_host, port=redis_stream_port, db=redis_stream_db))
+    return redis_stream_host, redis_stream_port, redis_stream_db, stream_name, group_name, consumer_name
 
 
 def connect_to_key_value_store_with_env_vars(expire_in_seconds=12*60*60) -> RedisKeyValueStore:
@@ -345,9 +390,14 @@ def connect_to_key_value_store_with_env_vars(expire_in_seconds=12*60*60) -> Redi
     --------
     - An instance of `RedisKeyValueStore`.
     """
-    redis_stream_host = os.getenv('REDIS_STREAM_HOST', 'redis')
-    redis_stream_port = os.getenv('REDIS_STREAM_PORT', 6379)
-    redis_stream_db = os.getenv('REDIS_STREAM_DB', 7)
+    redis_stream_host, redis_stream_port, redis_stream_db = _get_redis_stream_env_vars()
 
     return RedisKeyValueStore(RedisConfig(host=redis_stream_host, db=redis_stream_db, port=redis_stream_port),
                               expire_in_seconds=expire_in_seconds)
+
+
+def _get_redis_stream_env_vars():
+    redis_stream_host = os.getenv('REDIS_STREAM_HOST', 'redis')
+    redis_stream_port = os.getenv('REDIS_STREAM_PORT', 6379)
+    redis_stream_db = os.getenv('REDIS_STREAM_DB', 7)
+    return redis_stream_host, redis_stream_port, redis_stream_db

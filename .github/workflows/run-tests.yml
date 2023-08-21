@@ -30,6 +30,9 @@ jobs:
         run: pytest --cov=./hdx_redis_lib
         env:
           REDIS_STREAM_HOST: localhost
+          REDIS_STREAM_STREAM_NAME: hdx_event_stream
+          REDIS_STREAM_GROUP_NAME: hdx_jp_sw_qa_ingest_group
+          REDIS_STREAM_CONSUMER_NAME: hdx_jp_sw_qa_ingest_consumer_1
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v3
         if: matrix.python-version == '3.10'
