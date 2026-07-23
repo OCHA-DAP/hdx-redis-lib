@@ -10,17 +10,27 @@ from redis.exceptions import ResponseError
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_READ_BLOCK_MS = 2 * 60 * 1000            # 120s server-side block for XREADGROUP
+DEFAULT_SOCKET_TIMEOUT = 4 * 60                  # 240s; MUST exceed the read block above
+DEFAULT_SOCKET_CONNECT_TIMEOUT = 5               # fast fail on connect
+
 
 @dataclass
 class RedisConfig:
     host: str
     db: int
     port: int = 6379
+    socket_timeout: Optional[float] = DEFAULT_SOCKET_TIMEOUT
+    socket_connect_timeout: Optional[float] = DEFAULT_SOCKET_CONNECT_TIMEOUT
 
 
 class WriteOnlyRedisEventBus:
     def __init__(self, stream_name: str, redis_conf: RedisConfig, max_len=50_000):
-        self.redis_conn = redis.Redis(host=redis_conf.host, port=redis_conf.port, db=redis_conf.db)
+        self.redis_conn = redis.Redis(
+            host=redis_conf.host, port=redis_conf.port, db=redis_conf.db,
+            socket_timeout=redis_conf.socket_timeout,
+            socket_connect_timeout=redis_conf.socket_connect_timeout,
+        )
         self.stream_name = stream_name
         self.max_len = max_len
 
@@ -59,7 +69,7 @@ class RedisEventBus():
     def push_event(self, data: Dict[str, Any]) -> None:
         self._write_only_event_bus.push_event(data)
 
-    def read_event(self, block: Optional[int] = 2 * 60 * 1000) -> Optional[Dict[str, str]]:
+    def read_event(self, block: Optional[int] = DEFAULT_READ_BLOCK_MS) -> Optional[Dict[str, str]]:
         try:
             logger.debug('Trying to create consumer group {}'.format(self.group_name))
             self.redis_conn.xgroup_create(self.stream_name, self.group_name, id='0', mkstream=True)
@@ -68,10 +78,18 @@ class RedisEventBus():
                 logger.debug('Consumer group {} already exists'.format(self.consumer_name))
             else:
                 raise re
-        result = self.redis_conn.xreadgroup(
-            groupname=self.group_name, consumername=self.consumer_name, streams={self.stream_name: '>'},
-            block=block, count=1, noack=True
-        )
+        try:
+            result = self.redis_conn.xreadgroup(
+                groupname=self.group_name, consumername=self.consumer_name, streams={self.stream_name: '>'},
+                block=block, count=1, noack=True
+            )
+        except redis.exceptions.TimeoutError as te:
+            logger.warning(
+                'Socket timeout while reading from stream %s (block=%s, socket_timeout=%s): %s',
+                self.stream_name, block,
+                self.redis_conn.connection_pool.connection_kwargs.get('socket_timeout'), te
+            )
+            return None
 
         if not result:
             return None
@@ -134,7 +152,7 @@ class HDXRedisEventBus(RedisEventBus):
     def _create_write_only_event_bus(self, stream_name: str, redis_conf: RedisConfig) -> WriteOnlyRedisEventBus:
         return HDXWriteOnlyRedisEventBus(stream_name, redis_conf)
 
-    def read_hdx_event(self, block: Optional[int] = 2 * 60 * 1000) -> Optional[Dict[str, str]]:
+    def read_hdx_event(self, block: Optional[int] = DEFAULT_READ_BLOCK_MS) -> Optional[Dict[str, str]]:
         generic_event = self.read_event(block=block)
         return _extract_hdx_event(generic_event)
 
@@ -171,7 +189,11 @@ def _filter_by_event_type(event: Dict, allowed_event_types: Iterable[str]) -> bo
 
 class RedisKeyValueStore:
     def __init__(self, redis_conf: RedisConfig, expire_in_seconds=12*60*60) -> None:
-        self.redis_conn = redis.Redis(host=redis_conf.host, port=redis_conf.port, db=redis_conf.db)
+        self.redis_conn = redis.Redis(
+            host=redis_conf.host, port=redis_conf.port, db=redis_conf.db,
+            socket_timeout=redis_conf.socket_timeout,
+            socket_connect_timeout=redis_conf.socket_connect_timeout,
+        )
         self.expire_in_seconds = expire_in_seconds
 
     def exists(self, key):
