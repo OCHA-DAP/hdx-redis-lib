@@ -29,6 +29,28 @@ while True:
         pass
 ```
 
+Connection timeouts
+-------------------
+
+`RedisConfig` sets a socket timeout that is safely above the default blocking-read window,
+so consumers work out of the box with `redis-py >= 8` (which changed the default
+`socket_timeout` from `None` to 5s and would otherwise abort the blocking `XREADGROUP` early).
+
+You no longer need to patch
+`event_bus.redis_conn.connection_pool.connection_kwargs['socket_timeout']` manually.
+
+The defaults can be overridden per connection:
+
+```python
+from hdx_redis_lib import RedisConfig
+
+RedisConfig(
+    host='redis', db=7,
+    socket_timeout=240,          # default: 240s, MUST stay above the read block (default 120s)
+    socket_connect_timeout=5,    # default: 5s
+)
+```
+
 Example usage for storing and retrieving key/values
 ---------------------------------------------------
 
